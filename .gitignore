@@ -1,0 +1,13 @@
+# Dependencies
+backend/node_modules/
+frontend/node_modules/
+
+# Database (don't commit data)
+*.log
+
+# Environment variables (secrets)
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
