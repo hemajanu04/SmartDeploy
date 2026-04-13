@@ -101,9 +101,12 @@ app.get('/api/auth/user/:userId', async (req, res) => {
   }
 });
 
-// 4. Test Route
+// 4. Repository Routes (NEW - Day 3)
+app.use('/api/repos', require('./routes/repos'));
+
+// 5. Test Route
 app.get('/', (req, res) => {
-  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 2: GitHub OAuth Ready!</p>');
+  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 3: GitHub Repos Ready!</p>');
 });
 
 const PORT = 5000;
