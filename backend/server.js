@@ -82,7 +82,6 @@ app.get('/api/auth/github', passport.authenticate('github', { scope: ['user:emai
 app.get('/api/auth/github/callback', 
   passport.authenticate('github', { failureRedirect: 'http://localhost:3000' }),
   (req, res) => {
-    // Successful login, redirect to frontend dashboard
     res.redirect(`http://localhost:3000/dashboard?userId=${req.user._id}`);
   }
 );
@@ -101,12 +100,15 @@ app.get('/api/auth/user/:userId', async (req, res) => {
   }
 });
 
-// 4. Repository Routes (NEW - Day 3)
+// 4. Repository Routes
 app.use('/api/repos', require('./routes/repos'));
 
-// 5. Test Route
+// 5. Deployment Routes (NEW - Day 4)
+app.use('/api/deploy', require('./routes/deploy'));
+
+// 6. Test Route
 app.get('/', (req, res) => {
-  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 3: GitHub Repos Ready!</p>');
+  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 4: Deployment Pipeline Ready!</p>');
 });
 
 const PORT = 5000;
