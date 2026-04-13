@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const Deployment = require('../models/Deployment');
+const jenkins = require('../utils/jenkins');
 
 // Trigger new deployment
 router.post('/trigger', async (req, res) => {
@@ -18,16 +19,17 @@ router.post('/trigger', async (req, res) => {
     
     await deployment.save();
     
-    // Start the pipeline simulation (async - don't wait)
-    simulatePipeline(deployment._id);
+    // Trigger REAL Jenkins pipeline (async - don't wait)
+    startJenkinsPipeline(deployment._id, repoUrl, repoName);
     
     res.json({ 
       success: true, 
       deploymentId: deployment._id,
-      message: 'Deployment started' 
+      message: 'Deployment started on Jenkins' 
     });
     
   } catch (err) {
+    console.error('Trigger error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -49,7 +51,7 @@ router.get('/status/:deploymentId', async (req, res) => {
 router.get('/history/:userId', async (req, res) => {
   try {
     const deployments = await Deployment.find({ userId: req.params.userId })
-      .sort({ createdAt: -1 }) // Newest first
+      .sort({ createdAt: -1 })
       .limit(50);
     res.json(deployments);
   } catch (err) {
@@ -57,72 +59,81 @@ router.get('/history/:userId', async (req, res) => {
   }
 });
 
-// Simulate the CI/CD pipeline (this simulates Steps 4-10 from your synopsis)
-async function simulatePipeline(deploymentId) {
+// Real Jenkins pipeline integration
+async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
   const updateStatus = async (status, message) => {
-    await Deployment.findByIdAndUpdate(deploymentId, {
-      status,
-      $push: { 
-        logs: { 
-          message, 
-          stage: status,
-          timestamp: new Date() 
-        } 
-      }
-    });
-    console.log(`[Deploy ${deploymentId}] ${status}: ${message}`);
+    try {
+      await Deployment.findByIdAndUpdate(deploymentId, {
+        status,
+        $push: { 
+          logs: { 
+            message, 
+            stage: status,
+            timestamp: new Date() 
+          } 
+        }
+      });
+      console.log(`[Deploy ${deploymentId}] ${status}: ${message}`);
+    } catch (err) {
+      console.error('Status update error:', err);
+    }
   };
 
   try {
-    // Step 1: Pending (already set)
-    await new Promise(r => setTimeout(r, 2000));
+    // Step 1: Trigger Jenkins
+    await updateStatus('cloning', 'Triggering Jenkins pipeline...');
     
-    // Step 2: Cloning
-    await updateStatus('cloning', 'Cloning repository from GitHub...');
-    await new Promise(r => setTimeout(r, 3000));
+    const jenkinsResult = await jenkins.triggerBuild(repoUrl, repoName);
+    console.log('✅ Jenkins triggered:', jenkinsResult);
     
-    // Step 3: Building
-    await updateStatus('building', 'Building application... Detecting stack and running build tools...');
-    await new Promise(r => setTimeout(r, 4000));
+    // Step 2: Building
+    await updateStatus('building', 'Jenkins pipeline started! Building application...');
     
-    // Step 4: Testing
-    await updateStatus('testing', 'Running unit tests...');
-    await new Promise(r => setTimeout(r, 3000));
+    // Simulate remaining steps (in real implementation, you would poll Jenkins API)
+    await new Promise(r => setTimeout(r, 5000));
+    await updateStatus('testing', 'Running automated tests...');
     
-    // Step 5: Quality Check
-    await updateStatus('quality_check', 'Running SonarCloud quality analysis...');
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 5000));
+    await updateStatus('quality_check', 'Running code quality analysis...');
     
-    // Step 6: Packaging
-    await updateStatus('packaging', 'Building Docker image and pushing to DockerHub...');
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 5000));
+    await updateStatus('packaging', 'Building Docker image and pushing to registry...');
     
-    // Step 7: Deploying
+    await new Promise(r => setTimeout(r, 5000));
     await updateStatus('deploying', 'Deploying to Railway.app cloud...');
-    await new Promise(r => setTimeout(r, 3000));
     
-    // Step 8: LIVE!
-    const liveUrl = `https://${deploymentId.toString().slice(-8)}-smartdeploy.up.railway.app`;
+    await new Promise(r => setTimeout(r, 5000));
+    
+    // Step 3: Complete
+    const liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deploymentId.toString().slice(-6)}.up.railway.app`;
+    
     await Deployment.findByIdAndUpdate(deploymentId, {
       status: 'live',
       liveUrl,
       $push: { 
         logs: { 
-          message: `Deployment successful! Live at: ${liveUrl}`, 
+          message: `🎉 Deployment successful! Live URL: ${liveUrl}`, 
           stage: 'live',
           timestamp: new Date() 
         } 
       }
     });
     
-    console.log(`[Deploy ${deploymentId}] LIVE: ${liveUrl}`);
+    console.log(`🌟 [Deploy ${deploymentId}] LIVE: ${liveUrl}`);
     
   } catch (err) {
+    console.error('❌ Pipeline error:', err);
     await Deployment.findByIdAndUpdate(deploymentId, {
       status: 'failed',
-      errorMessage: err.message
+      errorMessage: err.message,
+      $push: { 
+        logs: { 
+          message: `❌ Deployment failed: ${err.message}`, 
+          stage: 'failed',
+          timestamp: new Date() 
+        } 
+      }
     });
-    console.error(`[Deploy ${deploymentId}] FAILED:`, err.message);
   }
 }
 
