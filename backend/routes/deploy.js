@@ -1,5 +1,7 @@
+const { sendDeploymentEmail } = require('../utils/email');
 const router = require('express').Router();
 const Deployment = require('../models/Deployment');
+const User = require('../models/User'); // ADD THIS LINE
 const jenkins = require('../utils/jenkins');
 
 // Trigger new deployment
@@ -20,7 +22,8 @@ router.post('/trigger', async (req, res) => {
     await deployment.save();
     
     // Trigger REAL Jenkins pipeline (async - don't wait)
-    startJenkinsPipeline(deployment._id, repoUrl, repoName);
+    // PASS userId HERE
+    startJenkinsPipeline(deployment._id, userId, repoUrl, repoName);
     
     res.json({ 
       success: true, 
@@ -60,7 +63,8 @@ router.get('/history/:userId', async (req, res) => {
 });
 
 // Real Jenkins pipeline integration
-async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
+// ADD userId PARAMETER HERE
+async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
   const updateStatus = async (status, message) => {
     try {
       await Deployment.findByIdAndUpdate(deploymentId, {
@@ -89,7 +93,7 @@ async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
     // Step 2: Building
     await updateStatus('building', 'Jenkins pipeline started! Building application...');
     
-    // Simulate remaining steps (in real implementation, you would poll Jenkins API)
+    // Simulate remaining steps
     await new Promise(r => setTimeout(r, 5000));
     await updateStatus('testing', 'Running automated tests...');
     
@@ -104,7 +108,7 @@ async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
     
     await new Promise(r => setTimeout(r, 5000));
     
-    // Step 3: Complete
+    // Step 3: Complete - GENERATE LIVE URL
     const liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deploymentId.toString().slice(-6)}.up.railway.app`;
     
     await Deployment.findByIdAndUpdate(deploymentId, {
@@ -121,6 +125,19 @@ async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
     
     console.log(`🌟 [Deploy ${deploymentId}] LIVE: ${liveUrl}`);
     
+    // ⬇️⬇️⬇️ ADD EMAIL CODE HERE ⬇️⬇️⬇️
+    try {
+      const user = await User.findById(userId);
+      if (user && user.email) {
+        await sendDeploymentEmail(user.email, repoName, liveUrl, 'success');
+        console.log(`📧 Email sent to ${user.email}`);
+      }
+    } catch (emailErr) {
+      console.error('Failed to send email:', emailErr);
+      // Don't fail deployment if email fails
+    }
+    // ⬆️⬆️⬆️ EMAIL CODE ENDS HERE ⬆️⬆️⬆️
+    
   } catch (err) {
     console.error('❌ Pipeline error:', err);
     await Deployment.findByIdAndUpdate(deploymentId, {
@@ -134,6 +151,16 @@ async function startJenkinsPipeline(deploymentId, repoUrl, repoName) {
         } 
       }
     });
+    
+    // Send failure email too
+    try {
+      const user = await User.findById(userId);
+      if (user && user.email) {
+        await sendDeploymentEmail(user.email, repoName, null, 'failed');
+      }
+    } catch (emailErr) {
+      console.error('Failed to send failure email:', emailErr);
+    }
   }
 }
 
