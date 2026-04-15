@@ -1,7 +1,7 @@
 const { sendDeploymentEmail } = require('../utils/email');
 const router = require('express').Router();
 const Deployment = require('../models/Deployment');
-const User = require('../models/User'); // ADD THIS LINE
+const User = require('../models/User');
 const jenkins = require('../utils/jenkins');
 
 // Trigger new deployment
@@ -21,8 +21,7 @@ router.post('/trigger', async (req, res) => {
     
     await deployment.save();
     
-    // Trigger REAL Jenkins pipeline (async - don't wait)
-    // PASS userId HERE
+    // Trigger REAL Jenkins pipeline
     startJenkinsPipeline(deployment._id, userId, repoUrl, repoName);
     
     res.json({ 
@@ -63,7 +62,6 @@ router.get('/history/:userId', async (req, res) => {
 });
 
 // Real Jenkins pipeline integration
-// ADD userId PARAMETER HERE
 async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
   const updateStatus = async (status, message) => {
     try {
@@ -125,18 +123,28 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     
     console.log(`🌟 [Deploy ${deploymentId}] LIVE: ${liveUrl}`);
     
-    // ⬇️⬇️⬇️ ADD EMAIL CODE HERE ⬇️⬇️⬇️
+    // ⬇️⬇️ EMAIL SENDING CODE - UPDATED WITH FALLBACK ⬇️⬇️
     try {
       const user = await User.findById(userId);
-      if (user && user.email) {
-        await sendDeploymentEmail(user.email, repoName, liveUrl, 'success');
-        console.log(`📧 Email sent to ${user.email}`);
+      
+      // Try to get email from user, or use fallback
+      let emailTo = user?.email;
+      
+      // If no email in database, use hardcoded for testing
+      if (!emailTo) {
+        emailTo = 'hemashree4440@gmail.com'; // FALLBACK EMAIL FOR TESTING
+        console.log('⚠️ No user email found, using fallback:', emailTo);
       }
+      
+      console.log('📧 Sending email to:', emailTo);
+      await sendDeploymentEmail(emailTo, repoName, liveUrl, 'success');
+      console.log('✅ Email sent successfully!');
+      
     } catch (emailErr) {
-      console.error('Failed to send email:', emailErr);
+      console.error('❌ Email sending failed:', emailErr.message);
       // Don't fail deployment if email fails
     }
-    // ⬆️⬆️⬆️ EMAIL CODE ENDS HERE ⬆️⬆️⬆️
+    // ⬆️⬆️ EMAIL CODE END ⬆️⬆️
     
   } catch (err) {
     console.error('❌ Pipeline error:', err);
@@ -152,12 +160,11 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
       }
     });
     
-    // Send failure email too
+    // Send failure email
     try {
       const user = await User.findById(userId);
-      if (user && user.email) {
-        await sendDeploymentEmail(user.email, repoName, null, 'failed');
-      }
+      const emailTo = user?.email || 'hemashree4440@gmail.com';
+      await sendDeploymentEmail(emailTo, repoName, null, 'failed');
     } catch (emailErr) {
       console.error('Failed to send failure email:', emailErr);
     }
