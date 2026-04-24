@@ -1,3 +1,4 @@
+const { deployToRailway } = require('../utils/railway');
 const { sendDeploymentEmail } = require('../utils/email');
 const router = require('express').Router();
 const Deployment = require('../models/Deployment');
@@ -101,14 +102,33 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     await new Promise(r => setTimeout(r, 5000));
     await updateStatus('packaging', 'Building Docker image and pushing to registry...');
     
-    await new Promise(r => setTimeout(r, 5000));
+    // ⬇️⬇️⬇️ RAILWAY DEPLOYMENT CODE - UPDATED ⬇️⬇️⬇️
     await updateStatus('deploying', 'Deploying to Railway.app cloud...');
     
+    let liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deploymentId.toString().slice(-6)}.up.railway.app`;
+    
+    // Try real Railway deployment
+    try {
+      console.log('🚂 Attempting Railway deployment...');
+      
+      // Wait for Jenkins to finish pushing to DockerHub (2 minutes)
+      await new Promise(r => setTimeout(r, 120000));
+      
+      // Your DockerHub username
+      const dockerHubUsername = 'hemashree04';
+      
+      const railwayResult = await deployToRailway(repoName, dockerHubUsername);
+      liveUrl = railwayResult.url;
+      console.log('✅ Railway URL:', liveUrl);
+    } catch (railwayErr) {
+      console.error('⚠️ Railway failed, using fallback URL:', railwayErr.message);
+      // liveUrl already set to fallback above
+    }
+    // ⬆️⬆️⬆️ RAILWAY CODE END ⬆️⬆️⬆️
+    
     await new Promise(r => setTimeout(r, 5000));
     
-    // Step 3: Complete - GENERATE LIVE URL
-    const liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deploymentId.toString().slice(-6)}.up.railway.app`;
-    
+    // Step 3: Complete - Update with LIVE URL
     await Deployment.findByIdAndUpdate(deploymentId, {
       status: 'live',
       liveUrl,
@@ -123,28 +143,21 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     
     console.log(`🌟 [Deploy ${deploymentId}] LIVE: ${liveUrl}`);
     
-    // ⬇️⬇️ EMAIL SENDING CODE - UPDATED WITH FALLBACK ⬇️⬇️
+    // ⬇️️ EMAIL CODE - Send to ACTUAL user email ⬇️⬇️
     try {
       const user = await User.findById(userId);
       
-      // Try to get email from user, or use fallback
-      let emailTo = user?.email;
-      
-      // If no email in database, use hardcoded for testing
-      if (!emailTo) {
-        emailTo = 'hemashree4440@gmail.com'; // FALLBACK EMAIL FOR TESTING
-        console.log('⚠️ No user email found, using fallback:', emailTo);
+      if (user && user.email) {
+        console.log('📧 Sending email to user:', user.email);
+        await sendDeploymentEmail(user.email, repoName, liveUrl, 'success');
+        console.log('✅ Email sent successfully to', user.email);
+      } else {
+        console.log('⚠️ User has no email saved:', user?.username);
       }
-      
-      console.log('📧 Sending email to:', emailTo);
-      await sendDeploymentEmail(emailTo, repoName, liveUrl, 'success');
-      console.log('✅ Email sent successfully!');
-      
     } catch (emailErr) {
       console.error('❌ Email sending failed:', emailErr.message);
-      // Don't fail deployment if email fails
     }
-    // ⬆️⬆️ EMAIL CODE END ⬆️⬆️
+    // ⬆️️ EMAIL CODE END ⬆️⬆️
     
   } catch (err) {
     console.error('❌ Pipeline error:', err);

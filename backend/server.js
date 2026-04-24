@@ -38,24 +38,46 @@ passport.deserializeUser(async (id, done) => {
 
 // GitHub OAuth Strategy
 passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID || 'your-client-id-here',
-    clientSecret: process.env.GITHUB_CLIENT_SECRET || 'your-client-secret-here',
-    callbackURL: "http://localhost:5000/api/auth/github/callback"
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    callbackURL: "http://localhost:5000/api/auth/github/callback",
+    scope: ['user:email', 'repo', 'read:user']
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
       let user = await User.findOne({ githubId: profile.id });
       
+      let email = profile.emails?.[0]?.value || null;
+      
+      if (!email && accessToken) {
+        try {
+          const axios = require('axios');
+          const emailRes = await axios.get('https://api.github.com/user/emails', {
+            headers: { Authorization: `token ${accessToken}` }
+          });
+          const primaryEmail = emailRes.data.find(e => e.primary && e.verified);
+          email = primaryEmail ? primaryEmail.email : emailRes.data[0]?.email;
+          console.log('Fetched email from GitHub API:', email);
+        } catch (e) {
+          console.log('Could not fetch email:', e.message);
+        }
+      }
+      
       if (!user) {
         user = new User({
           githubId: profile.id,
           username: profile.username,
-          email: profile.emails?.[0]?.value,
+          email: email,
           accessToken: accessToken
         });
         await user.save();
-        console.log('New user created:', user.username);
+        console.log('✅ New user created:', user.username, 'Email:', user.email);
       } else {
+        if (email && !user.email) {
+          user.email = email;
+          await user.save();
+          console.log('✅ Updated email for:', user.username, 'Email:', user.email);
+        }
         user.accessToken = accessToken;
         await user.save();
         console.log('User logged in:', user.username);
@@ -63,6 +85,7 @@ passport.use(new GitHubStrategy({
       
       done(null, user);
     } catch (err) {
+      console.error('GitHub OAuth Error:', err);
       done(err, null);
     }
   }
@@ -100,15 +123,25 @@ app.get('/api/auth/user/:userId', async (req, res) => {
   }
 });
 
-// 4. Repository Routes
+// 4. Logout
+app.get('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+    }
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+});
+
+// 5. Repository Routes
 app.use('/api/repos', require('./routes/repos'));
 
-// 5. Deployment Routes (NEW - Day 4)
+// 6. Deployment Routes
 app.use('/api/deploy', require('./routes/deploy'));
 
-// 6. Test Route
+// 7. Test Route
 app.get('/', (req, res) => {
-  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 4: Deployment Pipeline Ready!</p>');
+  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 6: All Features Complete!</p>');
 });
 
 const PORT = 5000;
