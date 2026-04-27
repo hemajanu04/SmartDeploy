@@ -20,7 +20,7 @@ async function deployToRailway(repoName, dockerHubUsername) {
     // Deploy using Docker image from DockerHub
     console.log('Deploying Docker image...');
     const { stdout: deployOutput } = await execPromise(
-      `railway up --image "${fullImageName}"`,
+      `railway up --image "${fullImageName}" --detach`,
       { 
         env: { ...process.env, RAILWAY_TOKEN: process.env.RAILWAY_TOKEN }
       }
@@ -34,6 +34,7 @@ async function deployToRailway(repoName, dockerHubUsername) {
       { env: { ...process.env, RAILWAY_TOKEN: process.env.RAILWAY_TOKEN } }
     );
     
+    // Extract URL from output
     const urlMatch = domainOutput.match(/https?:\/\/[^\s]+/);
     const liveUrl = urlMatch ? urlMatch[0] : `https://${repoName}.up.railway.app`;
     

@@ -136,12 +136,15 @@ app.get('/api/auth/logout', (req, res) => {
 // 5. Repository Routes
 app.use('/api/repos', require('./routes/repos'));
 
-// 6. Deployment Routes
+// 6. Jenkins Callback Route (NEW)
+app.use('/api/deploy/jenkins-callback', require('./routes/jenkins-callback'));
+
+// 7. Deployment Routes
 app.use('/api/deploy', require('./routes/deploy'));
 
-// 7. Test Route
+// 8. Test Route
 app.get('/', (req, res) => {
-  res.send('<h1>SmartDeploy Server Running! 🚀</h1><p>Day 6: All Features Complete!</p>');
+  res.send('<h1>SmartDeploy Server Running! 🚀</h1>');
 });
 
 const PORT = 5000;
