@@ -1,4 +1,4 @@
-const { deployToRailway } = require('../utils/railway');
+const { deployToRender } = require('../utils/render');
 const { sendDeploymentEmail } = require('../utils/email');
 const router = require('express').Router();
 const Deployment = require('../models/Deployment');
@@ -102,14 +102,15 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     await new Promise(r => setTimeout(r, 5000));
     await updateStatus('packaging', 'Building Docker image and pushing to registry...');
     
-    // ⬇️⬇️⬇️ RAILWAY DEPLOYMENT CODE - UPDATED ⬇️⬇️⬇️
-    await updateStatus('deploying', 'Deploying to Railway.app cloud...');
+    // ⬇️️⬇️ RENDER DEPLOYMENT CODE ⬇️⬇️⬇️
+    await updateStatus('deploying', 'Deploying to Render cloud...');
     
-    let liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${deploymentId.toString().slice(-6)}.up.railway.app`;
+    // Generate Render-style URL (lowercase for Docker compatibility)
+    let liveUrl = `https://${repoName.toLowerCase().replace(/[^a-z0-9]/g, '-')}.onrender.com`;
     
-    // Try real Railway deployment
+    // Try Render deployment
     try {
-      console.log('🚂 Attempting Railway deployment...');
+      console.log('🚀 Attempting Render deployment...');
       
       // Wait for Jenkins to finish pushing to DockerHub (2 minutes)
       await new Promise(r => setTimeout(r, 120000));
@@ -117,14 +118,13 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
       // Your DockerHub username
       const dockerHubUsername = 'hemashree04';
       
-      const railwayResult = await deployToRailway(repoName, dockerHubUsername);
-      liveUrl = railwayResult.url;
-      console.log('✅ Railway URL:', liveUrl);
-    } catch (railwayErr) {
-      console.error('⚠️ Railway failed, using fallback URL:', railwayErr.message);
-      // liveUrl already set to fallback above
+      const renderResult = await deployToRender(repoName, dockerHubUsername);
+      liveUrl = renderResult.url;
+      console.log('✅ Render URL:', liveUrl);
+    } catch (renderErr) {
+      console.error('⚠️ Render failed, using fallback URL:', renderErr.message);
     }
-    // ⬆️⬆️⬆️ RAILWAY CODE END ⬆️⬆️⬆️
+    // ⬆️⬆️⬆️ RENDER CODE END ⬆️⬆️⬆️
     
     await new Promise(r => setTimeout(r, 5000));
     
@@ -143,7 +143,7 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     
     console.log(`🌟 [Deploy ${deploymentId}] LIVE: ${liveUrl}`);
     
-    // ⬇️️ EMAIL CODE - Send to ACTUAL user email ⬇️⬇️
+    // ⬇️️ EMAIL CODE - Send to ACTUAL user email ⬇️️
     try {
       const user = await User.findById(userId);
       
@@ -157,7 +157,7 @@ async function startJenkinsPipeline(deploymentId, userId, repoUrl, repoName) {
     } catch (emailErr) {
       console.error('❌ Email sending failed:', emailErr.message);
     }
-    // ⬆️️ EMAIL CODE END ⬆️⬆️
+    // ⬆️⬆️ EMAIL CODE END ⬆️️
     
   } catch (err) {
     console.error('❌ Pipeline error:', err);
